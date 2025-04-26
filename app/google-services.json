@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "771888648842",
+    "firebase_url": "https://videomusicplayer-5a5fc-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "videomusicplayer-5a5fc",
+    "storage_bucket": "videomusicplayer-5a5fc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:771888648842:android:8eb1c4171a5d8898575373",
+        "android_client_info": {
+          "package_name": "com.example.videomusicplayer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9fxmTamgFCnv7R4WeSh9aDjbfWRzYq5s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
