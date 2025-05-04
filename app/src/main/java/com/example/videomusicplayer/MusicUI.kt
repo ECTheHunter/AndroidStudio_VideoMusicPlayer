@@ -22,8 +22,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.PlaylistRemove
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Shuffle
@@ -65,6 +68,11 @@ fun MusicScreen() {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     var focusRequest: AudioFocusRequest? = null
     val firebaseAnalytics = remember { Firebase.analytics }
+    var playlists by remember { mutableStateOf(mutableMapOf("Default Playlist" to songs)) }
+    var selectedPlaylistName by remember { mutableStateOf("Default Playlist") }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var displayedSongs = playlists[selectedPlaylistName] ?: emptyList()
+    var showAddDialog by remember { mutableStateOf<Pair<Song, Boolean>?>(null) }
 
     // Function to log song playback events
     fun logSongEvent(songTitle: String, eventType: String) {
@@ -172,7 +180,15 @@ fun MusicScreen() {
             }
         }
     )
-
+    LaunchedEffect(hasPermission, songs) {
+        if (hasPermission && songs.isNotEmpty()) {
+            playlists = playlists.toMutableMap().apply {
+                this["Default Playlist"] = songs
+            }
+            selectedPlaylistName = "Default Playlist"
+            displayedSongs = playlists["Default Playlist"] ?: emptyList()
+        }
+    }
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(
                 context,
@@ -242,6 +258,7 @@ fun MusicScreen() {
             handler.removeCallbacksAndMessages(null)
         }
     }
+
     // Update media player progress
     LaunchedEffect(mediaPlayer) {
         val updatePositionRunnable = object : Runnable {
@@ -268,20 +285,153 @@ fun MusicScreen() {
         if (!hasPermission) {
             return@Column
         }
+        var expanded by remember { mutableStateOf(false) }
+        Box(modifier = Modifier.padding(8.dp)) {
+            Button(onClick = { expanded = true }) {
+                Text("Playlists: $selectedPlaylistName")
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                playlists.keys.forEach { playlistName ->
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(playlistName)
+                                if (playlistName != "Default Playlist") {
+                                    IconButton(onClick = {
+                                        playlists = playlists.toMutableMap().apply {
+                                            remove(playlistName)
+                                        }
 
-        // Song List
+                                        // If deleted playlist was selected → fallback to Default
+                                        if (selectedPlaylistName == playlistName) {
+                                            selectedPlaylistName = "Default Playlist"
+                                            displayedSongs = playlists["Default Playlist"] ?: emptyList()
+                                        }
+
+                                        expanded = false
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete Playlist",
+                                            tint = Color.Red,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        onClick = {
+                            selectedPlaylistName = playlistName
+                            displayedSongs = playlists[playlistName] ?: emptyList()
+                            expanded = false
+                        }
+                    )
+                }
+
+                Divider()
+
+                DropdownMenuItem(
+                    text = { Text("Create New Playlist") },
+                    onClick = {
+                        showCreateDialog = true
+                        expanded = false
+                    }
+                )
+            }
+
+        }
+
+        if (showCreateDialog) {
+            var newPlaylistName by remember { mutableStateOf("") }
+            var errorMessage by remember { mutableStateOf<String?>(null) } // 👈 Add this
+
+            AlertDialog(
+                onDismissRequest = { showCreateDialog = false },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            when {
+                                newPlaylistName.isBlank() -> {
+                                    errorMessage = "Playlist name cannot be empty"
+                                }
+                                playlists.containsKey(newPlaylistName) -> {
+                                    errorMessage = "A playlist with this name already exists"
+                                }
+                                else -> {
+                                    playlists[newPlaylistName] = emptyList()
+                                    selectedPlaylistName = newPlaylistName
+                                    showCreateDialog = false
+                                }
+                            }
+                        }
+                    ) { Text("Create") }
+                },
+                dismissButton = {
+                    Button(onClick = { showCreateDialog = false }) {
+                        Text("Cancel")
+                    }
+                },
+                title = { Text("Create New Playlist") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = newPlaylistName,
+                            onValueChange = {
+                                newPlaylistName = it
+                                errorMessage = null // 👈 Clear error when user types again
+                            },
+                            label = { Text("Playlist Name") }
+                        )
+                        if (errorMessage != null) { // 👈 Show error below text field
+                            Text(
+                                text = errorMessage!!,
+                                color = Color.Red,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
+                }
+            )
+        }
+
+
         LazyColumn(
             modifier = Modifier
                 .height(400.dp)
                 .padding(16.dp)
         ) {
-            items(songs) { song ->
-                SongItem(song.title) {
-                    currentSong = song.title
-                    currentSongIndex = songs.indexOf(song)
-                }
+            items(displayedSongs) { song ->
+                SongItem(
+                    song = song,
+                    isInDefaultPlaylist = selectedPlaylistName == "Default Playlist",
+                    onPlayClick = {
+                        currentSong = song.title
+                        currentSongIndex = songs.indexOfFirst { it.title == song.title }
+                    },
+                    onAddClick = {
+                        // Open playlist selection dialog for adding
+                        showAddDialog = song to true
+                    },
+                    onRemoveClick = {
+                        playlists = playlists.toMutableMap().apply {
+                            val updated = this[selectedPlaylistName]?.toMutableList()
+                            updated?.remove(song)
+                            this[selectedPlaylistName] = updated ?: emptyList()
+                        }
+                        displayedSongs = playlists[selectedPlaylistName] ?: emptyList()
+                    }
+                )
             }
         }
+
 
         Text(
             text = currentSong,
@@ -388,6 +538,59 @@ fun MusicScreen() {
             )
         }
     }
+    @Composable
+    fun AddToPlaylistDialog(
+        song: Song,
+        playlists: Map<String, List<Song>>,
+        onAdd: (String) -> Unit,
+        onDismiss: () -> Unit
+    ) {
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Add \"${song.title}\" to Playlist") },
+            text = {
+                Column {
+                    playlists.keys
+                        .filter { it != "Default Playlist" }
+                        .forEach { playlistName ->
+                            Text(
+                                playlistName,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onAdd(playlistName)
+                                    }
+                                    .padding(8.dp)
+                            )
+                        }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    showAddDialog?.let { (song, visible) ->
+        if (visible) {
+            AddToPlaylistDialog(
+                song = song,
+                playlists = playlists,
+                onAdd = { playlistName ->
+                    playlists = playlists.toMutableMap().apply {
+                        val list = this[playlistName]?.toMutableList() ?: mutableListOf()
+                        if (song !in list) list.add(song)
+                        this[playlistName] = list
+                    }
+                    showAddDialog = null
+                },
+                onDismiss = { showAddDialog = null }
+            )
+        }
+    }
 
 }
 
@@ -417,20 +620,41 @@ fun fetchFirebaseSongs(onSongsFetched: (List<Song>) -> Unit) {
     }.addOnFailureListener { exception ->
         // Handle error if needed
     }
+
 }
 
 
 @Composable
-fun SongItem(song: String, onClick: () -> Unit) {
-    Column(
+fun SongItem(
+    song: Song,
+    isInDefaultPlaylist: Boolean,
+    onPlayClick: () -> Unit,
+    onAddClick: () -> Unit,
+    onRemoveClick: () -> Unit
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.LightGray)
-            .clickable(onClick = onClick)
-            .padding(16.dp)
+            .clickable(onClick = onPlayClick)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = song, fontSize = 16.sp)
+        Text(
+            text = song.title,
+            fontSize = 16.sp,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onAddClick) {
+            Icon(Icons.Default.PlaylistAdd, contentDescription = "Add to Playlist")
+        }
+        if (!isInDefaultPlaylist) {
+            IconButton(onClick = onRemoveClick) {
+                Icon(Icons.Default.PlaylistRemove, contentDescription = "Remove from Playlist")
+            }
+        }
     }
+
 }
 
 fun getAllSongs(context: Context): List<Song> {
