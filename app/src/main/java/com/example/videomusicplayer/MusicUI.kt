@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -582,7 +583,13 @@ fun MusicScreen() {
                 onAdd = { playlistName ->
                     playlists = playlists.toMutableMap().apply {
                         val list = this[playlistName]?.toMutableList() ?: mutableListOf()
-                        if (song !in list) list.add(song)
+                        if (song in list) {
+                            Toast.makeText(context, "Song already in $playlistName", Toast.LENGTH_SHORT).show()
+                        } else {
+                            list.add(song)
+                            this[playlistName] = list
+                            Toast.makeText(context, "Added to $playlistName", Toast.LENGTH_SHORT).show()
+                        }
                         this[playlistName] = list
                     }
                     showAddDialog = null
